@@ -10,6 +10,7 @@ interface ProductFormData {
   flavor?: string;
   weight?: string;
   sale_price?: number;
+  cost_price?: number;
   expiry_date?: string;
   lot_number?: string;
   min_stock?: number;
@@ -34,6 +35,7 @@ export default function ProductForm({ initialData, onSubmit, onCancel }: Product
     flavor: '',
     weight: '',
     sale_price: 0,
+    cost_price: 0,
     expiry_date: '',
     lot_number: '',
     min_stock: 5,
@@ -59,7 +61,7 @@ export default function ProductForm({ initialData, onSubmit, onCancel }: Product
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'sale_price' || name === 'min_stock' || name === 'max_stock' ? Number(value) : value
+      [name]: name === 'sale_price' || name === 'cost_price' || name === 'min_stock' || name === 'max_stock' ? Number(value) : value
     }));
   };
 
@@ -188,6 +190,21 @@ export default function ProductForm({ initialData, onSubmit, onCancel }: Product
             type="number"
             name="sale_price"
             value={formData.sale_price}
+            onChange={handleChange}
+            step="0.01"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            placeholder="0.00"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Costo de Adquisición (por unidad)
+          </label>
+          <input
+            type="number"
+            name="cost_price"
+            value={formData.cost_price}
             onChange={handleChange}
             step="0.01"
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"

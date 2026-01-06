@@ -38,6 +38,18 @@ export default function Reports() {
       } else if (reportTitle === 'Reporte de Inventario') {
         const p = await invoke<string>('export_inventory_report');
         alert(`✅ Reporte de Inventario exportado:\n${p}`);
+      } else if (reportTitle === 'Productos Más Vendidos') {
+        const p = await invoke<string>('export_top_products_report');
+        alert(`✅ Reporte de Productos Más Vendidos exportado:\n${p}`);
+      } else if (reportTitle === 'Análisis de Rentabilidad') {
+        const p = await invoke<string>('export_profitability_report');
+        alert(`✅ Reporte de Análisis de Rentabilidad exportado:\n${p}`);
+      } else if (reportTitle === 'Movimientos de Stock') {
+        const p = await invoke<string>('export_stock_movements_report');
+        alert(`✅ Reporte de Movimientos de Stock exportado:\n${p}`);
+      } else if (reportTitle === 'Reporte Financiero') {
+        const p = await invoke<string>('export_financial_report', { start_date: null, end_date: null });
+        alert(`✅ Reporte Financiero exportado:\n${p}`);
       } else {
         alert('🛠️ Ese reporte está en desarrollo');
       }
@@ -65,7 +77,11 @@ export default function Reports() {
         const p = await invoke<string>('export_inventory_report');
         alert(`✅ Reporte de Inventario exportado:\n${p}`);
       } else {
-        alert('🛠️ Reporte financiero en desarrollo');
+        const p = await invoke<string>('export_financial_report', {
+          start_date: startDate || null,
+          end_date: endDate || null,
+        });
+        alert(`✅ Reporte Financiero exportado:\n${p}`);
       }
     } catch (e) {
       alert('❌ Error generando el reporte');

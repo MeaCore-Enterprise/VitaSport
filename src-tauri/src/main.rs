@@ -220,32 +220,35 @@ fn export_inventory_report(state: State<AppState>) -> Result<String, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
 
     let mut stmt = conn
-        .prepare("SELECT id, sku, name, sale_price, brand, category, presentation, flavor, weight, expiry_date, lot_number, min_stock, max_stock, location, status FROM products")
+        .prepare("SELECT id, sku, name, sale_price, cost_price, brand, category, presentation, flavor, weight, expiry_date, lot_number, min_stock, max_stock, location, status FROM products")
         .map_err(|e| e.to_string())?;
 
-    let mut csv = String::from("id,sku,name,sale_price,brand,category,presentation,flavor,weight,expiry_date,lot_number,min_stock,max_stock,location,status,current_stock\n");
-    let rows = stmt.query_map([], |row| {
-        Ok((
-            row.get::<_, i32>(0)?,
-            row.get::<_, Option<String>>(1)?,
-            row.get::<_, String>(2)?,
-            row.get::<_, Option<f64>>(3)?,
-            row.get::<_, Option<String>>(4)?,
-            row.get::<_, Option<String>>(5)?,
-            row.get::<_, Option<String>>(6)?,
-            row.get::<_, Option<String>>(7)?,
-            row.get::<_, Option<String>>(8)?,
-            row.get::<_, Option<String>>(9)?,
-            row.get::<_, Option<String>>(10)?,
-            row.get::<_, Option<i32>>(11)?,
-            row.get::<_, Option<i32>>(12)?,
-            row.get::<_, Option<String>>(13)?,
-            row.get::<_, Option<String>>(14)?,
-        ))
-    }).map_err(|e| e.to_string())?;
+    let mut csv = String::from("id,sku,name,sale_price,cost_price,brand,category,presentation,flavor,weight,expiry_date,lot_number,min_stock,max_stock,location,status,current_stock,margin_percent\n");
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, i32>(0)?,                // id
+                row.get::<_, Option<String>>(1)?,     // sku
+                row.get::<_, String>(2)?,             // name
+                row.get::<_, Option<f64>>(3)?,        // sale_price
+                row.get::<_, Option<f64>>(4)?,        // cost_price
+                row.get::<_, Option<String>>(5)?,     // brand
+                row.get::<_, Option<String>>(6)?,     // category
+                row.get::<_, Option<String>>(7)?,     // presentation
+                row.get::<_, Option<String>>(8)?,     // flavor
+                row.get::<_, Option<String>>(9)?,     // weight
+                row.get::<_, Option<String>>(10)?,    // expiry_date
+                row.get::<_, Option<String>>(11)?,    // lot_number (TEXT)
+                row.get::<_, Option<i32>>(12)?,       // min_stock (INTEGER)
+                row.get::<_, Option<i32>>(13)?,       // max_stock (INTEGER)
+                row.get::<_, Option<String>>(14)?,    // location
+                row.get::<_, Option<String>>(15)?,    // status
+            ))
+        })
+        .map_err(|e| e.to_string())?;
 
     for r in rows {
-        let (id, sku, name, sale_price, brand, category, presentation, flavor, weight, expiry_date, lot_number, min_stock, max_stock, location, status) = r.map_err(|e| e.to_string())?;
+        let (id, sku, name, sale_price, cost_price, brand, category, presentation, flavor, weight, expiry_date, lot_number, min_stock, max_stock, location, status) = r.map_err(|e| e.to_string())?;
 
         let ingreso: i64 = conn.query_row(
             "SELECT COALESCE(SUM(quantity),0) FROM stock_movements WHERE product_id=?1 AND type='ingreso'",
@@ -259,12 +262,21 @@ fn export_inventory_report(state: State<AppState>) -> Result<String, String> {
         ).unwrap_or(0);
         let current_stock = ingreso - egreso;
 
+        let margin_percent: Option<f64> = match (sale_price, cost_price) {
+            (Some(sale), Some(cost)) if sale > 0.0 && cost > 0.0 => {
+                let diff = sale - cost;
+                Some(((diff / sale) * 100.0).round())
+            }
+            _ => None,
+        };
+
         csv.push_str(&format!(
-            "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
+            "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
             id,
             sku.unwrap_or_default(),
             name,
             sale_price.map(|v| format!("{:.2}", v)).unwrap_or_default(),
+            cost_price.map(|v| format!("{:.2}", v)).unwrap_or_default(),
             brand.unwrap_or_default(),
             category.unwrap_or_default(),
             presentation.unwrap_or_default(),
@@ -277,6 +289,7 @@ fn export_inventory_report(state: State<AppState>) -> Result<String, String> {
             location.unwrap_or_default(),
             status.unwrap_or_default(),
             current_stock,
+            margin_percent.map(|v| format!("{:.0}", v)).unwrap_or_default(),
         ));
     }
 
@@ -290,12 +303,289 @@ fn export_inventory_report(state: State<AppState>) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn export_top_products_report(state: State<AppState>) -> Result<String, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT s.product_id,
+                    COALESCE(p.sku, '') as sku,
+                    COALESCE(p.name, '') as name,
+                    COALESCE(p.category, '') as category,
+                    COALESCE(SUM(s.quantity), 0) as total_qty,
+                    COALESCE(SUM(s.sale_price), 0.0) as total_revenue
+             FROM sales s
+             LEFT JOIN products p ON p.id = s.product_id
+             GROUP BY s.product_id, sku, name, category
+             ORDER BY total_revenue DESC
+             LIMIT 50",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, i32>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, f64>(5)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut csv = String::from("product_id,sku,name,category,total_qty,total_revenue\n");
+    for r in rows {
+        let (pid, sku, name, category, qty, revenue) = r.map_err(|e| e.to_string())?;
+        csv.push_str(&format!(
+            "{},{},{},{},{},{}\n",
+            pid,
+            sku,
+            name,
+            category,
+            qty,
+            format!("{:.2}", revenue),
+        ));
+    }
+
+    let base: PathBuf = download_dir().ok_or("No se pudo obtener carpeta Descargas")?;
+    let out_dir = base.join("VitaSport");
+    fs::create_dir_all(&out_dir).map_err(|e| e.to_string())?;
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_secs();
+    let path = out_dir.join(format!("top_products_report_{}.csv", ts));
+    fs::write(&path, csv).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn export_stock_movements_report(state: State<AppState>) -> Result<String, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, product_id, type, quantity, note, created_by, created_at
+             FROM stock_movements
+             ORDER BY created_at DESC, id DESC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, i32>(0)?,
+                row.get::<_, i32>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i32>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, Option<i32>>(5)?,
+                row.get::<_, String>(6)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut csv = String::from("id,product_id,type,quantity,note,created_by,created_at\n");
+    for r in rows {
+        let (id, pid, movement_type, quantity, note, created_by, created_at) =
+            r.map_err(|e| e.to_string())?;
+        csv.push_str(&format!(
+            "{},{},{},{},{},{},{}\n",
+            id,
+            pid,
+            movement_type,
+            quantity,
+            note.unwrap_or_default(),
+            created_by.map(|v| v.to_string()).unwrap_or_default(),
+            created_at,
+        ));
+    }
+
+    let base: PathBuf = download_dir().ok_or("No se pudo obtener carpeta Descargas")?;
+    let out_dir = base.join("VitaSport");
+    fs::create_dir_all(&out_dir).map_err(|e| e.to_string())?;
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_secs();
+    let path = out_dir.join(format!("stock_movements_report_{}.csv", ts));
+    fs::write(&path, csv).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn export_profitability_report(state: State<AppState>) -> Result<String, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT p.id,
+                    COALESCE(p.sku, '') as sku,
+                    p.name,
+                    p.cost_price,
+                    COALESCE(SUM(s.quantity), 0) as total_qty,
+                    COALESCE(SUM(s.sale_price), 0.0) as total_revenue
+             FROM products p
+             LEFT JOIN sales s ON s.product_id = p.id
+             GROUP BY p.id, sku, p.name, p.cost_price
+             ORDER BY total_revenue DESC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, i32>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<f64>>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, f64>(5)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut csv = String::from("product_id,sku,name,unit_cost,total_qty_sold,total_revenue,estimated_total_cost,gross_profit,margin_percent\n");
+    for r in rows {
+        let (pid, sku, name, cost_price_opt, total_qty, total_revenue) =
+            r.map_err(|e| e.to_string())?;
+        let unit_cost = cost_price_opt.unwrap_or(0.0);
+        let qty_f = total_qty as f64;
+        let estimated_total_cost = unit_cost * qty_f;
+        let gross_profit = total_revenue - estimated_total_cost;
+        let margin_percent: Option<f64> = if total_revenue > 0.0 {
+            Some(((gross_profit / total_revenue) * 100.0).round())
+        } else {
+            None
+        };
+        csv.push_str(&format!(
+            "{},{},{},{:.2},{},{:.2},{:.2},{:.2},{}\n",
+            pid,
+            sku,
+            name,
+            unit_cost,
+            total_qty,
+            total_revenue,
+            estimated_total_cost,
+            gross_profit,
+            margin_percent
+                .map(|v| format!("{:.0}", v))
+                .unwrap_or_default(),
+        ));
+    }
+
+    let base: PathBuf = download_dir().ok_or("No se pudo obtener carpeta Descargas")?;
+    let out_dir = base.join("VitaSport");
+    fs::create_dir_all(&out_dir).map_err(|e| e.to_string())?;
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_secs();
+    let path = out_dir.join(format!("profitability_report_{}.csv", ts));
+    fs::write(&path, csv).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn export_financial_report(
+    state: State<AppState>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+) -> Result<String, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+
+    let (sales_income, other_income, expense): (f64, f64, f64);
+
+    if start_date.is_some() && end_date.is_some() {
+        let start = start_date.as_ref().unwrap();
+        let end = end_date.as_ref().unwrap();
+
+        sales_income = conn
+            .query_row(
+                "SELECT COALESCE(SUM(sale_price),0.0) FROM sales WHERE substr(sale_date,1,10) BETWEEN ?1 AND ?2",
+                rusqlite::params![start, end],
+                |row| row.get(0),
+            )
+            .unwrap_or(0.0);
+
+        other_income = conn
+            .query_row(
+                "SELECT COALESCE(SUM(amount),0.0) FROM cash_movements WHERE movement_type='ingreso' AND substr(movement_date,1,10) BETWEEN ?1 AND ?2",
+                rusqlite::params![start, end],
+                |row| row.get(0),
+            )
+            .unwrap_or(0.0);
+
+        expense = conn
+            .query_row(
+                "SELECT COALESCE(SUM(amount),0.0) FROM cash_movements WHERE movement_type='egreso' AND substr(movement_date,1,10) BETWEEN ?1 AND ?2",
+                rusqlite::params![start, end],
+                |row| row.get(0),
+            )
+            .unwrap_or(0.0);
+    } else {
+        sales_income = conn
+            .query_row(
+                "SELECT COALESCE(SUM(sale_price),0.0) FROM sales",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0.0);
+        other_income = conn
+            .query_row(
+                "SELECT COALESCE(SUM(amount),0.0) FROM cash_movements WHERE movement_type='ingreso'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0.0);
+        expense = conn
+            .query_row(
+                "SELECT COALESCE(SUM(amount),0.0) FROM cash_movements WHERE movement_type='egreso'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0.0);
+    }
+
+    let total_income = sales_income + other_income;
+    let balance = total_income - expense;
+
+    let mut csv = String::from("type,label,amount\n");
+    csv.push_str(&format!("income,Ingresos por ventas,{:.2}\n", sales_income));
+    csv.push_str(&format!("income,Otros ingresos,{:.2}\n", other_income));
+    csv.push_str(&format!("expense,Gastos / Egresos,{:.2}\n", expense));
+    csv.push_str(&format!("summary,Total ingresos,{:.2}\n", total_income));
+    csv.push_str(&format!("summary,Balance,{:.2}\n", balance));
+
+    let base: PathBuf = download_dir().ok_or("No se pudo obtener carpeta Descargas")?;
+    let out_dir = base.join("VitaSport");
+    fs::create_dir_all(&out_dir).map_err(|e| e.to_string())?;
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_secs();
+    let path = out_dir.join(format!("financial_report_{}.csv", ts));
+    fs::write(&path, csv).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 fn export_all_reports(state: State<AppState>) -> Result<Vec<String>, String> {
     let mut paths = Vec::new();
     let inv = export_inventory_report(state.clone())?;
     paths.push(inv);
-    let sales = export_sales_report(state, None, None)?;
+    let sales = export_sales_report(state.clone(), None, None)?;
     paths.push(sales);
+    let top = export_top_products_report(state.clone())?;
+    paths.push(top);
+    let stock = export_stock_movements_report(state.clone())?;
+    paths.push(stock);
+    let prof = export_profitability_report(state.clone())?;
+    paths.push(prof);
+    let fin = export_financial_report(state, None, None)?;
+    paths.push(fin);
     Ok(paths)
 }
 
@@ -305,6 +595,7 @@ struct Product {
     sku: Option<String>,
     name: String,
     sale_price: Option<f64>,
+    cost_price: Option<f64>,
     brand: Option<String>,
     category: Option<String>,
     presentation: Option<String>,
@@ -414,6 +705,7 @@ fn init_database() -> Result<Connection> {
             sku TEXT UNIQUE,
             name TEXT NOT NULL,
             sale_price REAL,
+            cost_price REAL,
             brand TEXT,
             category TEXT,
             presentation TEXT,
@@ -439,6 +731,9 @@ fn init_database() -> Result<Connection> {
         }
         if !col_names.iter().any(|c| c == "sale_price") {
             let _ = conn.execute("ALTER TABLE products ADD COLUMN sale_price REAL", []);
+        }
+        if !col_names.iter().any(|c| c == "cost_price") {
+            let _ = conn.execute("ALTER TABLE products ADD COLUMN cost_price REAL", []);
         }
         if !col_names.iter().any(|c| c == "max_stock") {
             let _ = conn.execute("ALTER TABLE products ADD COLUMN max_stock INTEGER", []);
@@ -533,7 +828,7 @@ fn init_database() -> Result<Connection> {
 fn get_products(state: State<AppState>) -> Result<Vec<Product>, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
-        .prepare("SELECT id, sku, name, sale_price, brand, category, presentation, flavor, weight, image_path, expiry_date, lot_number, min_stock, max_stock, location, status FROM products")
+        .prepare("SELECT id, sku, name, sale_price, cost_price, brand, category, presentation, flavor, weight, image_path, expiry_date, lot_number, min_stock, max_stock, location, status FROM products")
         .map_err(|e| e.to_string())?;
 
     let products = stmt
@@ -543,18 +838,19 @@ fn get_products(state: State<AppState>) -> Result<Vec<Product>, String> {
                 sku: row.get(1)?,
                 name: row.get(2)?,
                 sale_price: row.get(3)?,
-                brand: row.get(4)?,
-                category: row.get(5)?,
-                presentation: row.get(6)?,
-                flavor: row.get(7)?,
-                weight: row.get(8)?,
-                image_path: row.get(9)?,
-                expiry_date: row.get(10)?,
-                lot_number: row.get(11)?,
-                min_stock: row.get(12)?,
-                max_stock: row.get(13)?,
-                location: row.get(14)?,
-                status: row.get(15)?,
+                cost_price: row.get(4)?,
+                brand: row.get(5)?,
+                category: row.get(6)?,
+                presentation: row.get(7)?,
+                flavor: row.get(8)?,
+                weight: row.get(9)?,
+                image_path: row.get(10)?,
+                expiry_date: row.get(11)?,
+                lot_number: row.get(12)?,
+                min_stock: row.get(13)?,
+                max_stock: row.get(14)?,
+                location: row.get(15)?,
+                status: row.get(16)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -583,12 +879,13 @@ fn add_product(state: State<AppState>, product: Product) -> Result<i64, String> 
         }
     }
     conn.execute(
-        "INSERT INTO products (sku, name, sale_price, brand, category, presentation, flavor, weight, image_path, expiry_date, lot_number, min_stock, max_stock, location, status) 
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+        "INSERT INTO products (sku, name, sale_price, cost_price, brand, category, presentation, flavor, weight, image_path, expiry_date, lot_number, min_stock, max_stock, location, status) 
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
         rusqlite::params![
             product.sku,
             product.name,
             product.sale_price,
+            product.cost_price,
             product.brand,
             product.category,
             product.presentation,
@@ -630,12 +927,13 @@ fn add_product(state: State<AppState>, product: Product) -> Result<i64, String> 
 fn update_product(state: State<AppState>, product: Product) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     conn.execute(
-        "UPDATE products SET sku=?1, name=?2, sale_price=?3, brand=?4, category=?5, presentation=?6, flavor=?7, weight=?8, image_path=?9, expiry_date=?10, lot_number=?11, min_stock=?12, max_stock=?13, location=?14, status=?15 
-         WHERE id=?16",
+        "UPDATE products SET sku=?1, name=?2, sale_price=?3, cost_price=?4, brand=?5, category=?6, presentation=?7, flavor=?8, weight=?9, image_path=?10, expiry_date=?11, lot_number=?12, min_stock=?13, max_stock=?14, location=?15, status=?16 
+         WHERE id=?17",
         rusqlite::params![
             product.sku,
             product.name,
             product.sale_price,
+            product.cost_price,
             product.brand,
             product.category,
             product.presentation,
@@ -1020,6 +1318,10 @@ fn main() {
             get_stock_balances,
             export_inventory_report,
             export_sales_report,
+            export_top_products_report,
+            export_stock_movements_report,
+            export_profitability_report,
+            export_financial_report,
             export_all_reports,
             get_users,
             add_user,

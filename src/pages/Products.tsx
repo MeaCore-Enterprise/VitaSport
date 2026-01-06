@@ -10,6 +10,7 @@ interface Product {
   sku?: string;
   name: string;
   sale_price?: number;
+  cost_price?: number;
   brand?: string;
   category?: string;
   presentation?: string;
@@ -326,6 +327,12 @@ export default function Products() {
                     Precio Venta
                   </th>
                   <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+                    Costo
+                  </th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+                    Margen
+                  </th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                     Stock
                   </th>
                   <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
@@ -362,6 +369,23 @@ export default function Products() {
                     </td>
                     <td className="px-5 py-4 text-sm font-semibold text-gray-900 dark:text-gray-100">
                       ${product.sale_price?.toLocaleString() || '0'}
+                    </td>
+                    <td className="px-5 py-4 text-sm text-gray-900 dark:text-gray-100">
+                      {product.cost_price != null ? `$${product.cost_price.toLocaleString()}` : <span className="text-gray-400 dark:text-gray-600">-</span>}
+                    </td>
+                    <td className="px-5 py-4 text-sm text-gray-900 dark:text-gray-100">
+                      {(() => {
+                        const sale = Number(product.sale_price ?? 0);
+                        const cost = Number(product.cost_price ?? 0);
+                        if (!sale || !cost) return '-';
+                        const diff = sale - cost;
+                        if (diff < 0) {
+                          const pctLoss = Math.round(Math.abs(diff) / sale * 100);
+                          return `-$${Math.abs(diff).toLocaleString()} (${pctLoss}%)`;
+                        }
+                        const pct = Math.round((diff / sale) * 100);
+                        return `$${diff.toLocaleString()} (${pct}%)`;
+                      })()}
                     </td>
                     <td className="px-5 py-4 text-sm text-gray-900 dark:text-gray-100">
                       {product.current_stock ?? 0}

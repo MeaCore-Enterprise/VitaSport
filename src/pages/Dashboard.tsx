@@ -234,7 +234,7 @@ export default function Dashboard() {
               ))}
             </div>
           )}
-          <div className="h-56 rounded-lg">
+          <div className="h-56 w-full min-w-0 rounded-lg">
             {topProducts.length === 0 ? (
               <div className="h-full bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 rounded-lg flex items-center justify-center">
                 <div className="text-center">
@@ -243,8 +243,8 @@ export default function Dashboard() {
                 </div>
               </div>
             ) : (
-              <div className="h-full">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="h-full w-full min-w-0">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <BarChart data={barData} layout="vertical" margin={{ top: 8, right: 16, left: 16, bottom: 8 }}>
                     <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                     <XAxis type="number" hide domain={[0, 100]} />
@@ -289,8 +289,8 @@ export default function Dashboard() {
                 </div>
               </div>
             ) : (
-              <div className="h-full">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="h-full w-full min-w-0">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <AreaChart data={trend} margin={{ top: 8, right: 16, left: 16, bottom: 8 }}>
                     <defs>
                       <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">

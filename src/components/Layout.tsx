@@ -5,7 +5,8 @@ import {
   ShoppingCart, 
   FileText,
   Users,
-  LogOut
+  LogOut,
+  Settings
 } from 'lucide-react';
 import { useDarkMode } from '../hooks/useDarkMode';
 import { useAuth } from '../contexts/AuthContext';
@@ -16,6 +17,7 @@ const menuItems = [
   { path: '/sales', icon: ShoppingCart, label: 'Ventas' },
   { path: '/reports', icon: FileText, label: 'Reportes' },
   { path: '/users', icon: Users, label: 'Usuarios' },
+  { path: '/settings', icon: Settings, label: 'Configuración' },
 ];
 
 /**

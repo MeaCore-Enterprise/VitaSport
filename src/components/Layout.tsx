@@ -40,7 +40,7 @@ export default function Layout() {
       {/* Sidebar con soporte para modo oscuro */}
       <aside className="w-64 bg-gray-800 dark:bg-gray-950 shadow-lg flex flex-col relative">
         <div className="p-6 border-b border-gray-700 dark:border-gray-800">
-          <h1 className="text-2xl font-bold text-white">VitaSport</h1>
+          <h1 className="text-2xl font-bold text-white">VitaSport Nutricion</h1>
           <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">Sistema de Inventario</p>
         </div>
         

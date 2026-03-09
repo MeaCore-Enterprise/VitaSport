@@ -58,7 +58,7 @@ export default function Login() {
             <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl mb-4 shadow-lg">
               <span className="text-2xl font-bold text-white">VS</span>
             </div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">VitaSport</h1>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">VitaSport Nutricion</h1>
             <p className="text-sm text-gray-600 dark:text-gray-400">Sistema de Gestión de Inventario</p>
           </div>
 

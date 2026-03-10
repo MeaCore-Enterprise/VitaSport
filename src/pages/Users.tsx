@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api';
 import { Plus, Edit, Trash2, Users as UsersIcon } from 'lucide-react';
 import Button from '../components/Button';
 import Modal from '../components/Modal';
+import { useAuth } from '../contexts/AuthContext';
 
 interface User {
   id?: number;
@@ -24,6 +25,19 @@ interface UserFormData {
  * Conectada a la base de datos SQLite
  */
 export default function Users() {
+  const { user } = useAuth();
+  if (user?.role !== 'Administrador') {
+    return (
+      <div className="p-6 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+          Acceso restringido
+        </h1>
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          Solo los usuarios con rol Administrador pueden gestionar usuarios.
+        </p>
+      </div>
+    );
+  }
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);

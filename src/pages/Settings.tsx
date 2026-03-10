@@ -1,7 +1,50 @@
 import { User, Bell, Shield, Database, Globe } from 'lucide-react';
 import Button from '../components/Button';
+import { invoke } from '@tauri-apps/api';
+import { useAuth } from '../contexts/AuthContext';
+
+const isTauriEnvironment = () => {
+  if (typeof window === 'undefined') return false;
+  const win = window as unknown as { __TAURI__?: unknown; __TAURI_IPC__?: unknown };
+  return Boolean(win.__TAURI__ || win.__TAURI_IPC__);
+};
 
 export default function Settings() {
+  const { user } = useAuth();
+
+  const handleResetDatabase = async () => {
+    if (!isTauriEnvironment()) {
+      alert('Esta acción solo está disponible en la app de escritorio (Tauri).');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      '⚠️ Esta acción borrará TODOS los datos (productos, ventas, movimientos de stock y caja, usuarios) y dejará solo el usuario admin/admin.\n\n¿Seguro que quieres continuar?'
+    );
+    if (!confirmed) return;
+
+    try {
+      await invoke('reset_database');
+      alert('Base de datos limpiada correctamente.\n\nUsuario por defecto: admin / admin');
+    } catch (error) {
+      console.error('Error al limpiar la base de datos:', error);
+      alert('Error al limpiar la base de datos. Revisa la consola para más detalles.');
+    }
+  };
+
+  if (user?.role !== 'Administrador') {
+    return (
+      <div className="p-6 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+          Acceso restringido
+        </h1>
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          Solo los usuarios con rol Administrador pueden acceder a la configuración avanzada.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div>
       <h1 className="text-3xl font-bold text-gray-800 mb-6">Configuración</h1>
@@ -90,7 +133,9 @@ export default function Settings() {
           <div className="flex gap-3">
             <Button variant="secondary">Exportar Datos</Button>
             <Button variant="secondary">Importar Datos</Button>
-            <Button variant="danger">Limpiar Base de Datos</Button>
+            <Button variant="danger" onClick={handleResetDatabase}>
+              Limpiar Base de Datos
+            </Button>
           </div>
         </div>
 

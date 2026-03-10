@@ -684,6 +684,9 @@ struct AppState {
 fn init_database() -> Result<Connection> {
     let conn = Connection::open("vitasport.db")?;
 
+    // Asegurar integridad referencial
+    conn.execute("PRAGMA foreign_keys = ON", [])?;
+
     // Create users table
     conn.execute(
         "CREATE TABLE IF NOT EXISTS users (
@@ -823,6 +826,59 @@ fn init_database() -> Result<Connection> {
     Ok(conn)
 }
 
+/// Elimina todos los datos de la base de datos y la reinicializa
+/// dejando solo el usuario admin por defecto.
+#[tauri::command]
+fn reset_database(state: State<AppState>) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+
+    conn.execute("BEGIN IMMEDIATE TRANSACTION", [])
+        .map_err(|e| e.to_string())?;
+
+    let result: Result<(), String> = (|| {
+        conn.execute("DELETE FROM stock_movements", [])
+            .map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM sales", [])
+            .map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM purchases", [])
+            .map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM cash_movements", [])
+            .map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM products", [])
+            .map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM users", [])
+            .map_err(|e| e.to_string())?;
+
+        // Recrear usuario admin
+        let admin_password_hash =
+            hash("admin", DEFAULT_COST).map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT INTO users (username, password_hash, role, fullname) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![
+                "admin",
+                admin_password_hash,
+                "Administrador",
+                "Administrador del Sistema"
+            ],
+        )
+        .map_err(|e| e.to_string())?;
+
+        Ok(())
+    })();
+
+    match result {
+        Ok(()) => {
+            conn.execute("COMMIT", [])
+                .map_err(|e| e.to_string())?;
+            Ok(())
+        }
+        Err(err) => {
+            let _ = conn.execute("ROLLBACK", []);
+            Err(err)
+        }
+    }
+}
+
 // Tauri commands
 #[tauri::command]
 fn get_products(state: State<AppState>) -> Result<Vec<Product>, String> {
@@ -957,10 +1013,33 @@ fn update_product(state: State<AppState>, product: Product) -> Result<(), String
 #[tauri::command]
 fn delete_product(state: State<AppState>, id: i32) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    conn.execute("DELETE FROM products WHERE id=?1", [id])
+    conn.execute("BEGIN IMMEDIATE TRANSACTION", [])
         .map_err(|e| e.to_string())?;
 
-    Ok(())
+    let result: Result<(), String> = (|| {
+        // Eliminar primero dependencias para evitar errores de integridad
+        conn.execute("DELETE FROM stock_movements WHERE product_id=?1", [id])
+            .map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM sales WHERE product_id=?1", [id])
+            .map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM purchases WHERE product_id=?1", [id])
+            .map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM products WHERE id=?1", [id])
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    })();
+
+    match result {
+        Ok(()) => {
+            conn.execute("COMMIT", [])
+                .map_err(|e| e.to_string())?;
+            Ok(())
+        }
+        Err(err) => {
+            let _ = conn.execute("ROLLBACK", []);
+            Err(err)
+        }
+    }
 }
 
 #[tauri::command]
@@ -1328,6 +1407,7 @@ fn main() {
             update_user,
             delete_user,
             verify_login,
+            reset_database,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

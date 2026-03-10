@@ -27,7 +27,7 @@ const menuItems = [
 export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { username, logout } = useAuth();
+  const { username, user, logout } = useAuth();
   
   // Detectar modo oscuro del sistema automáticamente
   useDarkMode();
@@ -36,6 +36,20 @@ export default function Layout() {
     logout();
     navigate('/login');
   };
+
+  const role = user?.role;
+
+  const visibleItems = menuItems.filter((item) => {
+    if (role === 'Administrador') return true;
+    if (role === 'Vendedor') {
+      return ['/dashboard', '/inventory', '/sales', '/reports'].includes(item.path);
+    }
+    if (role === 'Almacenero') {
+      return ['/dashboard', '/inventory', '/reports'].includes(item.path);
+    }
+    // Si no hay rol definido, por seguridad oculta Usuarios y Configuración
+    return item.path !== '/users' && item.path !== '/settings';
+  });
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
@@ -47,7 +61,7 @@ export default function Layout() {
         </div>
         
         <nav className="p-4 flex-1 overflow-y-auto pb-32">
-          {menuItems.map((item) => {
+          {visibleItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
             
@@ -79,7 +93,9 @@ export default function Layout() {
               </div>
               <div>
                 <p className="text-sm font-medium text-white">{username}</p>
-                <p className="text-xs text-gray-400">Administrador</p>
+                <p className="text-xs text-gray-400">
+                  {user?.role || 'Administrador'}
+                </p>
               </div>
             </div>
           </div>

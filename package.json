@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build && npm run package:zip",
+    "package:zip": "powershell -Command \"New-Item -ItemType Directory -Force dist | Out-Null; Compress-Archive -Path 'GUIA_DE_INSTALACION.md','src-tauri/target/release/bundle/nsis/VitaSport_*_x64-setup.exe' -DestinationPath 'dist/VitaSport_1.0.0_windows.zip' -Force\""
   },
   "dependencies": {
     "@tauri-apps/api": "^1.5.6",

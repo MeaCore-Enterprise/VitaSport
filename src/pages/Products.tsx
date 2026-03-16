@@ -333,10 +333,10 @@ export default function Products() {
                     Margen
                   </th>
                   <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                    Stock
+                    Stock Actual
                   </th>
                   <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                    Stock Máximo
+                    Stock Mínimo
                   </th>
                   <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                     Vencimiento
@@ -391,7 +391,7 @@ export default function Products() {
                       {product.current_stock ?? 0}
                     </td>
                     <td className="px-5 py-4 text-sm text-gray-900 dark:text-gray-100">
-                      {product.max_stock ?? 0}
+                      {product.min_stock ?? 0}
                     </td>
                     <td className="px-5 py-4 text-sm text-gray-600 dark:text-gray-400">
                       {product.expiry_date || <span className="text-gray-400 dark:text-gray-600">-</span>}

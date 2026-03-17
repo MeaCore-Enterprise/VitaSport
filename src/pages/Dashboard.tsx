@@ -11,6 +11,11 @@ interface Product {
   category?: string;
 }
 
+interface StockBalance {
+  product_id: number;
+  current_stock: number;
+}
+
 interface Sale {
   sale_price: number;
 }
@@ -86,9 +91,10 @@ export default function Dashboard() {
         const start_date = fmt(start);
         const end_date = fmt(end);
 
-        const [products, sales, top, tr, tot] = await Promise.all([
+        const [products, sales, balances, top, tr, tot] = await Promise.all([
           invoke<Product[]>('get_products'),
           invoke<Sale[]>('get_sales'),
+          invoke<StockBalance[]>('get_stock_balances'),
           invoke<SalesByProduct[]>('get_sales_by_product', { start_date, end_date, order_by: orderBy, category: selectedCategory || null, limit: 5 }),
           invoke<SalesTrendPoint[]>('get_sales_trend', { days: rangeDays }),
           invoke<SalesTotals>('get_sales_totals', { start_date, end_date, category: selectedCategory || null }),
@@ -97,7 +103,15 @@ export default function Dashboard() {
         // Calcular estadísticas desde los datos reales
         const totalProducts = products.length;
         const activeProducts = products.filter(p => p.name).length;
-        const lowStockProducts = products.filter(p => (p.min_stock || 0) <= 5).length;
+        const balanceMap = new Map<number, number>(
+          balances.map((b) => [b.product_id, Number(b.current_stock) || 0])
+        );
+        const lowStockProducts = products.filter((p) => {
+          const min = Number(p.min_stock) || 0;
+          if (!p.id || min <= 0) return false; // si no hay mínimo definido, no alerta
+          const current = balanceMap.get(p.id) ?? 0;
+          return current < min;
+        }).length;
         const totalSales = sales.length;
         const totalRevenue = sales.reduce((sum, sale) => sum + sale.sale_price, 0);
 

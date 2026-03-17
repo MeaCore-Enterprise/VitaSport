@@ -19,6 +19,7 @@ interface Product {
   id?: number;
   name: string;
   sale_price?: number;
+  brand?: string;
 }
 
 /**
@@ -35,6 +36,7 @@ export default function Sales() {
   });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
+  const [productMap, setProductMap] = useState<Record<number, Product>>({});
   const [form, setForm] = useState<{ product_id: number; quantity: number; sale_price: number; discount?: number; channel?: string }>(
     { product_id: 0, quantity: 1, sale_price: 0, discount: 0, channel: 'Tienda' }
   );
@@ -49,6 +51,7 @@ export default function Sales() {
       if (typeof window !== 'undefined' && '__TAURI__' in window) {
         const result = await invoke<Product[]>('get_products');
         setProducts(result);
+        setProductMap(Object.fromEntries(result.filter(p => p.id != null).map(p => [Number(p.id), p])));
         const first = result[0];
         setForm(prev => ({ ...prev, product_id: first?.id || 0, sale_price: first?.sale_price || 0 }));
       } else {
@@ -125,8 +128,13 @@ export default function Sales() {
       setLoading(true);
       
       if (typeof window !== 'undefined' && '__TAURI__' in window) {
-        const result = await invoke<Sale[]>('get_sales');
+        const [result, prods] = await Promise.all([
+          invoke<Sale[]>('get_sales'),
+          invoke<Product[]>('get_products'),
+        ]);
         setSales(result);
+        setProducts(prods);
+        setProductMap(Object.fromEntries(prods.filter(p => p.id != null).map(p => [Number(p.id), p])));
 
         const today = new Date().toISOString().split('T')[0];
         const currentMonth = new Date().getMonth();
@@ -150,11 +158,15 @@ export default function Sales() {
         console.info('🚀 Modo desarrollo: Interfaz lista para registrar ventas');
         console.info('💡 Para backend completo, ejecuta: npm run tauri:dev');
         setSales([]);
+        setProducts([]);
+        setProductMap({});
         setStats({ today: 0, month: 0, total: 0 });
       }
     } catch (error) {
       console.error('❌ Error cargando ventas:', error);
       setSales([]);
+      setProducts([]);
+      setProductMap({});
       setStats({ today: 0, month: 0, total: 0 });
     } finally {
       setLoading(false);
@@ -174,7 +186,9 @@ export default function Sales() {
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Producto</label>
             <select name="product_id" value={form.product_id} onChange={handleChange} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg">
               {products.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
+                <option key={p.id} value={p.id}>
+                  {p.name}{p.brand ? ` - ${p.brand}` : ''}
+                </option>
               ))}
             </select>
           </div>
@@ -322,8 +336,13 @@ export default function Sales() {
                     <td className="px-5 py-4 text-sm text-gray-600 dark:text-gray-400">
                       {sale.sale_date ? new Date(sale.sale_date).toLocaleDateString() : '-'}
                     </td>
-                    <td className="px-5 py-4 text-sm text-gray-900 dark:text-gray-100">
-                      Producto #{sale.product_id}
+                    <td className="px-5 py-4">
+                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                        {productMap[sale.product_id]?.name ?? `Producto #${sale.product_id}`}
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        {productMap[sale.product_id]?.brand || '-'}
+                      </div>
                     </td>
                     <td className="px-5 py-4 text-sm text-gray-600 dark:text-gray-400">
                       {sale.quantity} unidades

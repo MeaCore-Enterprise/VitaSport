@@ -373,18 +373,38 @@ export default function Products() {
                     <td className="px-5 py-4 text-sm text-gray-900 dark:text-gray-100">
                       {product.cost_price != null ? `$${product.cost_price.toLocaleString()}` : <span className="text-gray-400 dark:text-gray-600">-</span>}
                     </td>
-                    <td className="px-5 py-4 text-sm text-gray-900 dark:text-gray-100">
+                    <td className="px-5 py-4">
                       {(() => {
-                        const sale = Number(product.sale_price ?? 0);
-                        const cost = Number(product.cost_price ?? 0);
-                        if (!sale || !cost) return '-';
-                        const diff = sale - cost;
-                        if (diff < 0) {
-                          const pctLoss = Math.round(Math.abs(diff) / sale * 100);
-                          return `-$${Math.abs(diff).toLocaleString()} (${pctLoss}%)`;
+                        const sale = Number(product.sale_price);
+                        const cost = Number(product.cost_price);
+
+                        // Sin datos suficientes
+                        if (!Number.isFinite(sale) || !Number.isFinite(cost) || sale <= 0 || cost <= 0) {
+                          return <span className="text-sm text-gray-400 dark:text-gray-600">-</span>;
                         }
-                        const pct = Math.round((diff / sale) * 100);
-                        return `$${diff.toLocaleString()} (${pct}%)`;
+
+                        const profit = sale - cost; // ganancia por unidad
+                        const marginOnSale = (profit / sale) * 100; // % sobre venta
+
+                        const profitAbs = Math.abs(profit);
+                        const profitText = `$${profitAbs.toLocaleString()}`;
+                        const pctText = `${Math.round(Math.abs(marginOnSale))}%`;
+
+                        const isLoss = profit < 0;
+                        const tone = isLoss
+                          ? 'text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/30'
+                          : 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30';
+
+                        return (
+                          <div className="inline-flex items-center gap-2">
+                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${tone}`}>
+                              {isLoss ? `-${profitText}` : profitText}
+                            </span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              ({isLoss ? `-${pctText}` : pctText})
+                            </span>
+                          </div>
+                        );
                       })()}
                     </td>
                     <td className="px-5 py-4 text-sm text-gray-900 dark:text-gray-100">

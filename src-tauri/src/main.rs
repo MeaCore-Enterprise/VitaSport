@@ -1087,14 +1087,25 @@ fn add_stock_movement(state: State<AppState>, movement: StockMovement) -> Result
 }
 
 #[tauri::command]
-fn get_sales(state: State<AppState>) -> Result<Vec<Sale>, String> {
+fn get_sales(
+    state: State<AppState>,
+    limit: Option<i32>,
+    offset: Option<i32>,
+) -> Result<Vec<Sale>, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let lim = limit.unwrap_or(100).max(1);
+    let off = offset.unwrap_or(0).max(0);
     let mut stmt = conn
-        .prepare("SELECT id, product_id, quantity, sale_price, discount, channel, sale_date, created_by FROM sales ORDER BY sale_date DESC LIMIT 100")
+        .prepare(
+            "SELECT id, product_id, quantity, sale_price, discount, channel, sale_date, created_by
+             FROM sales
+             ORDER BY sale_date DESC
+             LIMIT ?1 OFFSET ?2",
+        )
         .map_err(|e| e.to_string())?;
 
     let sales = stmt
-        .query_map([], |row| {
+        .query_map(rusqlite::params![lim, off], |row| {
             Ok(Sale {
                 id: row.get(0)?,
                 product_id: row.get(1)?,

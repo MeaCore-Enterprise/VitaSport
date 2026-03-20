@@ -37,13 +37,17 @@ export default function Sales() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [productMap, setProductMap] = useState<Record<number, Product>>({});
+  const pageSize = 10;
+  const [page, setPage] = useState(0);
+  const [hasNextPage, setHasNextPage] = useState(false);
   const [form, setForm] = useState<{ product_id: number; quantity: number; sale_price: number; discount?: number; channel?: string }>(
     { product_id: 0, quantity: 1, sale_price: 0, discount: 0, channel: 'Tienda' }
   );
 
   useEffect(() => {
-    loadSales();
-  }, []);
+    loadSales(page);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
 
   const handleNewSale = async () => {
     setIsModalOpen(true);
@@ -103,7 +107,8 @@ export default function Sales() {
         };
         await invoke('add_sale', { sale: payload });
         setIsModalOpen(false);
-        await loadSales();
+        setPage(0); // recargar desde la primera página
+        await loadSales(0);
         alert('Venta registrada');
       } else {
         alert('Ejecuta la app con backend para registrar ventas');
@@ -123,18 +128,21 @@ export default function Sales() {
    * - Desarrollo (npm run dev): No carga datos, muestra interfaz vacía
    * - Producción (npm run tauri:dev): Carga datos reales desde SQLite
    */
-  const loadSales = async () => {
+  const loadSales = async (pageIndex: number = page) => {
     try {
       setLoading(true);
       
       if (typeof window !== 'undefined' && '__TAURI__' in window) {
+        const limit = pageSize;
+        const offset = pageIndex * pageSize;
         const [result, prods] = await Promise.all([
-          invoke<Sale[]>('get_sales'),
+          invoke<Sale[]>('get_sales', { limit, offset }),
           invoke<Product[]>('get_products'),
         ]);
         setSales(result);
         setProducts(prods);
         setProductMap(Object.fromEntries(prods.filter(p => p.id != null).map(p => [Number(p.id), p])));
+        setHasNextPage(result.length === pageSize);
 
         const today = new Date().toISOString().split('T')[0];
         const currentMonth = new Date().getMonth();
@@ -160,6 +168,7 @@ export default function Sales() {
         setSales([]);
         setProducts([]);
         setProductMap({});
+        setHasNextPage(false);
         setStats({ today: 0, month: 0, total: 0 });
       }
     } catch (error) {
@@ -167,6 +176,7 @@ export default function Sales() {
       setSales([]);
       setProducts([]);
       setProductMap({});
+      setHasNextPage(false);
       setStats({ today: 0, month: 0, total: 0 });
     } finally {
       setLoading(false);
@@ -361,6 +371,30 @@ export default function Sales() {
             </table>
           )}
         </div>
+
+        {(!loading && sales.length > 0) && (
+          <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-gray-100 dark:border-gray-700">
+            <div className="text-sm text-gray-600 dark:text-gray-400">
+              Página <span className="font-semibold text-gray-900 dark:text-gray-100">{page + 1}</span> (máx. {pageSize} ventas)
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+                className="px-3 py-2 rounded-lg text-sm font-medium bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Anterior
+              </button>
+              <button
+                onClick={() => setPage((p) => p + 1)}
+                disabled={!hasNextPage}
+                className="px-3 py-2 rounded-lg text-sm font-medium bg-gray-900 text-white hover:bg-black disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Siguiente
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

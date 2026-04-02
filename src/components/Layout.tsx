@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import { useDarkMode } from '../hooks/useDarkMode';
 import { useAuth } from '../contexts/AuthContext';
+import { useUpdateChecker } from '../hooks/useUpdateChecker';
+import UpdateNotification from './UpdateNotification';
 
 const menuItems = [
   { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -28,6 +30,7 @@ export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { username, user, logout } = useAuth();
+  const { hasUpdate, updateInfo, isChecking, dismissUpdate } = useUpdateChecker();
   
   // Detectar modo oscuro del sistema automáticamente
   useDarkMode();
@@ -115,6 +118,13 @@ export default function Layout() {
           <Outlet />
         </div>
       </main>
+
+      <UpdateNotification
+        hasUpdate={hasUpdate}
+        updateInfo={updateInfo}
+        isChecking={isChecking}
+        dismissUpdate={dismissUpdate}
+      />
     </div>
   );
 }

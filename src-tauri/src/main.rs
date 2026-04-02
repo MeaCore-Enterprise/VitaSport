@@ -8,8 +8,10 @@ use tauri::State;
 use bcrypt::{hash, verify, DEFAULT_COST};
 use std::fs;
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::process::Command;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::api::path::download_dir;
+use reqwest::blocking::Client;
 
 // Database models
 #[derive(Debug, Serialize, Deserialize)]
@@ -1385,6 +1387,161 @@ fn verify_login(state: State<AppState>, username: String, password: String) -> R
     }
 }
 
+// =========================
+// Auto-update vía GitHub Releases (sin updater oficial de Tauri)
+// =========================
+
+#[derive(Debug, Serialize, Deserialize)]
+struct UpdateInfo {
+    has_update: bool,
+    latest_version: String,
+    download_url: String,
+    release_notes: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct GitHubReleaseLatest {
+    tag_name: String,
+    body: Option<String>,
+    assets: Vec<GitHubReleaseAsset>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GitHubReleaseAsset {
+    name: String,
+    browser_download_url: Option<String>,
+}
+
+fn parse_semver_parts(version: &str) -> Option<(u64, u64, u64)> {
+    // Acepta formatos tipo "v1.1.0" o "1.1.0-beta".
+    let s = version.trim().strip_prefix('v').unwrap_or(version.trim());
+    let mut iter = s.split('.');
+    let major = iter.next()?.parse::<u64>().ok()?;
+    let minor = iter.next()?.parse::<u64>().ok()?;
+    let patch_token = iter.next()?;
+    let patch_str = patch_token
+        .split(&['-', '+'][..])
+        .next()
+        .unwrap_or(patch_token);
+    let patch = patch_str.parse::<u64>().ok()?;
+    Some((major, minor, patch))
+}
+
+fn semver_to_string(parts: (u64, u64, u64)) -> String {
+    format!("{}.{}.{}", parts.0, parts.1, parts.2)
+}
+
+#[tauri::command]
+fn check_for_updates(current_version: String) -> Result<UpdateInfo, String> {
+    let current_parts = parse_semver_parts(&current_version)
+        .ok_or_else(|| "Versión actual inválida".to_string())?;
+
+    let client = Client::builder()
+        .timeout(Duration::from_secs(15))
+        .user_agent("VitaSport")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let api_url = "https://api.github.com/repos/KronoxYT/VitaSport/releases/latest";
+    let resp = client
+        .get(api_url)
+        .send()
+        .map_err(|e| e.to_string())?;
+
+    if !resp.status().is_success() {
+        return Err(format!("GitHub API status {}", resp.status()));
+    }
+
+    let release: GitHubReleaseLatest = resp.json().map_err(|e| e.to_string())?;
+    let latest_parts = match parse_semver_parts(&release.tag_name) {
+        Some(p) => p,
+        None => {
+            return Ok(UpdateInfo {
+                has_update: false,
+                latest_version: release.tag_name,
+                download_url: String::new(),
+                release_notes: release.body.unwrap_or_default(),
+            });
+        }
+    };
+
+    // Versión de GitHub = tag_name (ej. v1.1.0). `release_notes` es el body del release, no un número.
+    // `has_update` solo es true si la release es estrictamente mayor que la versión instalada.
+    let has_update = latest_parts > current_parts;
+    if !has_update {
+        return Ok(UpdateInfo {
+            has_update: false,
+            latest_version: semver_to_string(latest_parts),
+            download_url: String::new(),
+            release_notes: release.body.unwrap_or_default(),
+        });
+    }
+
+    let download_url = release
+        .assets
+        .iter()
+        .find(|a| a.name.to_ascii_lowercase().ends_with(".exe"))
+        .and_then(|a| a.browser_download_url.clone())
+        .unwrap_or_default();
+
+    if download_url.is_empty() {
+        return Ok(UpdateInfo {
+            has_update: false,
+            latest_version: semver_to_string(latest_parts),
+            download_url: String::new(),
+            release_notes: release.body.unwrap_or_default(),
+        });
+    }
+
+    Ok(UpdateInfo {
+        has_update: true,
+        latest_version: semver_to_string(latest_parts),
+        download_url,
+        release_notes: release.body.unwrap_or_default(),
+    })
+}
+
+#[tauri::command]
+fn download_and_run_update(download_url: String, latest_version: String) -> Result<(), String> {
+    if !cfg!(windows) {
+        return Err("Solo disponible en Windows".to_string());
+    }
+
+    let client = Client::builder()
+        .timeout(Duration::from_secs(60))
+        .user_agent("VitaSport")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let bytes = client
+        .get(&download_url)
+        .send()
+        .map_err(|e| e.to_string())?
+        .bytes()
+        .map_err(|e| e.to_string())?;
+
+    let base_dir = download_dir().ok_or_else(|| "No se pudo obtener carpeta de Descargas".to_string())?;
+    let out_dir = base_dir.join("VitaSport").join("updates");
+    std::fs::create_dir_all(&out_dir).map_err(|e| e.to_string())?;
+
+    let file_name = download_url
+        .split('/')
+        .last()
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| format!("VitaSport_{}_x64-setup.exe", latest_version));
+    let installer_path = out_dir.join(file_name);
+
+    std::fs::write(&installer_path, &bytes).map_err(|e| e.to_string())?;
+
+    // Nota: no esperamos el proceso; simplemente lanzamos el instalador.
+    Command::new(installer_path)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 fn main() {
     let db = init_database().expect("Failed to initialize database");
 
@@ -1419,6 +1576,8 @@ fn main() {
             delete_user,
             verify_login,
             reset_database,
+            check_for_updates,
+            download_and_run_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

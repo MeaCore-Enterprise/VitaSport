@@ -17,81 +17,19 @@ npm --version
 
 ### Instalación
 
-Repositorio principal del proyecto (**upstream**):
-
-`https://github.com/MeaCore-Enterprise/VitaSport`
-
-#### Opción A — Tienes permiso de escritura en el repo principal
-
 ```bash
-git clone https://github.com/MeaCore-Enterprise/VitaSport.git
-cd VitaSport
-npm install
-npm run dev          # solo frontend
-npm run tauri:dev    # frontend + Tauri + SQLite
-```
-
-#### Opción B — Contribuyes con fork (recomendado si no eres colaborador)
-
-1. En GitHub, haz **Fork** de `MeaCore-Enterprise/VitaSport` a tu cuenta.
-2. Clona **tu fork** y añade el repo principal como `upstream`:
-
-```bash
-git clone https://github.com/TU_USUARIO/VitaSport.git
+# 1. Clonar el repositorio
+git clone https://github.com/KronoxYT/VitaSport.git
 cd VitaSport
 
-git remote add upstream https://github.com/MeaCore-Enterprise/VitaSport.git
-
-# Comprobar remotes:
-#   origin    → tu fork (push aquí)
-#   upstream  → repo principal (solo fetch/merge)
-git remote -v
-```
-
-3. Instalación y comandos iguales que en la opción A:
-
-```bash
+# 2. Instalar dependencias
 npm install
+
+# 3. Ejecutar en modo desarrollo (solo frontend)
 npm run dev
+
+# 4. Para desarrollo completo con backend
 npm run tauri:dev
-```
-
-#### Mantener tu fork al día
-
-```bash
-git fetch upstream
-git checkout master
-git merge upstream/master
-# o: git rebase upstream/master
-git push origin master
-```
-
----
-
-## 🔀 Pull requests
-
-1. Crea una rama desde `master` (o la rama base que indique el mantenedor):
-
-```bash
-git checkout master
-git pull upstream master
-git checkout -b feat/mi-cambio
-```
-
-2. Commits siguiendo el formato de la sección **Convenciones de Commit** más abajo en este documento.
-
-3. Sube la rama a **tu fork** (`origin`):
-
-```bash
-git push -u origin feat/mi-cambio
-```
-
-4. En GitHub, abre un **Pull Request** desde `TU_USUARIO:VitaSport:feat/mi-cambio` hacia `MeaCore-Enterprise/VitaSport` (rama `master` u otra indicada).
-
-5. Si usas [GitHub CLI](https://cli.github.com/) autenticado:
-
-```bash
-gh pr create --repo MeaCore-Enterprise/VitaSport --head TU_USUARIO:feat/mi-cambio --base master
 ```
 
 ---
@@ -261,7 +199,7 @@ export interface Supplier {
 ```typescript
 // src/pages/Suppliers.tsx
 import { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api';
+import { invoke } from '@tauri-apps/api/core';
 import { Supplier } from '../types/supplier';
 
 export default function Suppliers() {
